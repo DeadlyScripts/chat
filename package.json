@@ -1,11 +1,75 @@
-{
-  "name": "deadly-chat-api",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2"
-  }
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.use(express.json());
+
+// Global in-memory storage
+let messages = [];
+
+// Helper to send JSON responses
+function sendJson(res, status, data) {
+  res.status(status).json(data);
 }
+
+// Init endpoint
+app.post('/api/v1/chat/init', (req, res) => {
+  sendJson(res, 200, { success: true });
+});
+
+// Send message (global)
+app.post('/api/v1/chat/send', (req, res) => {
+  const { userId, username, displayName, message } = req.body;
+
+  if (!message || typeof message !== 'string' || message.trim() === '') {
+    return sendJson(res, 400, { success: false, error: 'Valid message required' });
+  }
+
+  const newMsg = {
+    id: Date.now().toString() + Math.random().toString(36).slice(2, 10),
+    userId: userId || 'unknown',
+    username: username || 'Guest',
+    displayName: displayName || username || 'Guest',
+    message: message.trim().slice(0, 2000),
+    timestamp: Date.now()
+  };
+
+  messages.push(newMsg);
+
+  // Limit to last 300 messages
+  if (messages.length > 300) messages.shift();
+
+  console.log(`New global message from ${newMsg.username}: ${newMsg.message}`);
+
+  sendJson(res, 200, {
+    success: true,
+    message: 'Message sent',
+    messageData: newMsg
+  });
+});
+
+// Get messages (global)
+app.get('/api/v1/chat/messages', (req, res) => {
+  const { after = '0', limit = '50' } = req.query;
+
+  const afterTime = Number(after) || 0;
+  const limitNum = Math.min(Number(limit) || 50, 100); // cap at 100
+
+  const filtered = messages
+    .filter(msg => msg.timestamp > afterTime)
+    .slice(0, limitNum);
+
+  sendJson(res, 200, {
+    success: true,
+    messages: filtered
+  });
+});
+
+// Fallback for unknown routes
+app.use((req, res) => {
+  sendJson(res, 404, { success: false, error: 'Endpoint not found' });
+});
+
+app.listen(port, () => {
+  console.log(`Global JSON chat API running on port ${port}`);
+});
