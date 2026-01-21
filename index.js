@@ -4,57 +4,61 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// In-memory messages (reset on restart/sleep — good for start)
+// In-memory storage for global chat messages
+// Messages reset when the server sleeps/restarts (normal on free Render)
 let messages = [];
 
-// POST /api/v1/chat/init
+// POST /api/v1/chat/init - dummy endpoint your script expects
 app.post('/api/v1/chat/init', (req, res) => {
   res.json({ success: true });
 });
 
-// POST /api/v1/chat/send
+// POST /api/v1/chat/send - send a message to the global chat
 app.post('/api/v1/chat/send', (req, res) => {
-  const { userId, username, displayName, jobId, message, chatType = 'general' } = req.body;
+  const { userId, username, displayName, message } = req.body;
 
-  if (!jobId || !message || message.trim() === '') {
-    return res.status(400).json({ success: false, error: 'jobId and message required' });
+  if (!message || message.trim() === '') {
+    return res.status(400).json({ success: false, error: 'Message required' });
   }
 
   const newMsg = {
-    id: Date.now().toString(),
+    id: Date.now().toString() + Math.random().toString(36).substring(2, 10),
     userId: userId || 'unknown',
     username: username || 'Guest',
     displayName: displayName || username || 'Guest',
-    jobId,
-    message: message.slice(0, 2000),
-    chatType,
+    message: message.slice(0, 2000), // basic length limit
     timestamp: Date.now()
   };
 
   messages.push(newMsg);
-  if (messages.length > 200) messages.shift(); // keep last 200
+
+  // Keep only the last 300 messages to prevent memory growth
+  if (messages.length > 300) {
+    messages.shift();
+  }
 
   res.json({
     success: true,
-    message: 'Sent',
+    message: 'Message sent to global chat',
     messageData: newMsg
   });
 });
 
-// GET /api/v1/chat/messages
+// GET /api/v1/chat/messages - get recent global messages
 app.get('/api/v1/chat/messages', (req, res) => {
-  const { jobId, after = '0', limit = '50', chatType = 'general' } = req.query;
-
-  if (!jobId) return res.status(400).json({ success: false, error: 'jobId required' });
+  const { after = '0', limit = '50' } = req.query;
 
   const afterTime = Number(after);
   const filtered = messages
-    .filter(m => m.jobId === jobId && m.chatType === chatType && m.timestamp > afterTime)
+    .filter(msg => msg.timestamp > afterTime)
     .slice(0, Number(limit));
 
-  res.json({ success: true, messages: filtered });
+  res.json({
+    success: true,
+    messages: filtered
+  });
 });
 
 app.listen(port, () => {
-  console.log(`API running → port ${port}`);
+  console.log(`Global chat server running on port ${port}`);
 });
