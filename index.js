@@ -1,5 +1,4 @@
 const express = require('express');
-
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -29,12 +28,12 @@ app.post('/api/v1/chat/init', (req, res) => {
 
 // POST send message
 app.post('/api/v1/chat/send', (req, res) => {
-  const { userId, username, displayName, message, chatType } = req.body;
-
+  const { userId, username, displayName, message, chatType, serverId } = req.body;
+  
   if (!message || message.trim() === '') {
     return res.status(400).json({ success: false, error: 'Message required' });
   }
-
+  
   const newMsg = {
     id: Date.now().toString() + Math.random().toString(36).substring(2, 10),
     userId: userId || 'unknown',
@@ -42,30 +41,42 @@ app.post('/api/v1/chat/send', (req, res) => {
     displayName: displayName || username || 'Guest',
     message: message.slice(0, 2000),
     timestamp: Date.now(),
-    chatType: chatType || 'general'
+    chatType: chatType || 'local', // Default to 'local'
+    serverId: serverId || null // Only for local chats
   };
-
+  
   messages.push(newMsg);
+  
+  // Keep only last 300 messages
   if (messages.length > 300) {
     messages.shift();
   }
-
+  
   res.json({
     success: true,
-    message: 'Message sent to global chat',
+    message: `Message sent to ${newMsg.chatType} chat`,
     messageData: newMsg
   });
 });
 
 // GET messages
 app.get('/api/v1/chat/messages', (req, res) => {
-  const { after = '0', limit = '50', chatType = 'general' } = req.query;
+  const { after = '0', limit = '50', chatType = 'local', serverId } = req.query;
   const afterTime = Number(after);
-
-  const filtered = messages
-    .filter(msg => msg.timestamp > afterTime && msg.chatType === chatType)
-    .slice(0, Number(limit));
-
+  
+  let filtered = messages.filter(msg => {
+    // Must be after timestamp
+    if (msg.timestamp <= afterTime) return false;
+    
+    // Must match chatType
+    if (msg.chatType !== chatType) return false;
+    
+    // If local chat, must match serverId
+    if (chatType === 'local' && msg.serverId !== serverId) return false;
+    
+    return true;
+  }).slice(0, Number(limit));
+  
   res.json({
     success: true,
     messages: filtered
