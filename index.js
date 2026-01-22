@@ -9,17 +9,6 @@ const PORT = process.env.PORT || 3000;
 // Trust proxy to get real IP addresses (important for Render/Heroku/etc)
 app.set('trust proxy', 1);
 
-// Manual CORS headers instead of using cors package
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
-
 app.use(express.json());
 
 // IP Hashing - stores hashed IPs instead of real IPs
