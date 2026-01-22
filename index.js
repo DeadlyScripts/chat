@@ -1,21 +1,31 @@
 const express = require('express');
+const cors = require('cors');
+
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Enable CORS – this is required so Roblox/exploits can talk to your API
+app.use(cors({
+  origin: '*',                          // Allow from anywhere (including Roblox)
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  credentials: false,
+  optionsSuccessStatus: 200
+}));
+
 app.use(express.json());
 
-// In-memory storage for global chat messages
-// Messages reset when the server sleeps/restarts (normal on free Render)
+// In-memory storage (resets on server restart/sleep – normal for free Render)
 let messages = [];
 
-// POST /api/v1/chat/init - dummy endpoint your script expects
+// POST /api/v1/chat/init – just confirms connection
 app.post('/api/v1/chat/init', (req, res) => {
   res.json({ success: true });
 });
 
-// POST /api/v1/chat/send - send a message to the global chat
+// POST /api/v1/chat/send – add new message to global chat
 app.post('/api/v1/chat/send', (req, res) => {
-  const { userId, username, displayName, message } = req.body;
+  const { userId, username, displayName, message, chatType } = req.body;
 
   if (!message || message.trim() === '') {
     return res.status(400).json({ success: false, error: 'Message required' });
@@ -26,31 +36,32 @@ app.post('/api/v1/chat/send', (req, res) => {
     userId: userId || 'unknown',
     username: username || 'Guest',
     displayName: displayName || username || 'Guest',
-    message: message.slice(0, 2000), // basic length limit
-    timestamp: Date.now()
+    message: message.slice(0, 2000), // limit length
+    timestamp: Date.now(),
+    chatType: chatType || 'general'
   };
 
   messages.push(newMsg);
 
-  // Keep only the last 300 messages to prevent memory growth
+  // Keep only last 300 messages
   if (messages.length > 300) {
     messages.shift();
   }
 
   res.json({
     success: true,
-    message: 'Message sent to global chat',
+    message: 'Message sent',
     messageData: newMsg
   });
 });
 
-// GET /api/v1/chat/messages - get recent global messages
+// GET /api/v1/chat/messages – fetch messages (supports ?after= timestamp)
 app.get('/api/v1/chat/messages', (req, res) => {
-  const { after = '0', limit = '50' } = req.query;
-
+  const { after = '0', limit = '50', chatType = 'general' } = req.query;
   const afterTime = Number(after);
+
   const filtered = messages
-    .filter(msg => msg.timestamp > afterTime)
+    .filter(msg => msg.timestamp > afterTime && msg.chatType === chatType)
     .slice(0, Number(limit));
 
   res.json({
