@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 // Trust proxy to get real IP addresses (important for Render/Heroku/etc)
 app.set('trust proxy', 1);
