@@ -2,13 +2,11 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Manual CORS headers (fixes Roblox block without extra package)
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');  // Allow Roblox / any origin
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
-  // Handle OPTIONS preflight (required for POST)
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -18,20 +16,22 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// In-memory messages (resets on restart/sleep — normal free tier)
 let messages = [];
 
-// POST init (dummy)
 app.post('/api/v1/chat/init', (req, res) => {
   res.json({ success: true });
 });
 
-// POST send message
 app.post('/api/v1/chat/send', (req, res) => {
   const { userId, username, displayName, message, chatType, serverId } = req.body;
   
   if (!message || message.trim() === '') {
     return res.status(400).json({ success: false, error: 'Message required' });
+  }
+  
+  // For local chat, serverId is REQUIRED
+  if (chatType === 'local' && !serverId) {
+    return res.status(400).json({ success: false, error: 'serverId required for local chat' });
   }
   
   const newMsg = {
@@ -41,16 +41,17 @@ app.post('/api/v1/chat/send', (req, res) => {
     displayName: displayName || username || 'Guest',
     message: message.slice(0, 2000),
     timestamp: Date.now(),
-    chatType: chatType || 'local', // Default to 'local'
-    serverId: serverId || null // Only for local chats
+    chatType: chatType || 'local',
+    serverId: serverId ? String(serverId) : null  // Convert to string!
   };
   
   messages.push(newMsg);
   
-  // Keep only last 300 messages
   if (messages.length > 300) {
     messages.shift();
   }
+  
+  console.log('Message saved:', newMsg);  // DEBUG
   
   res.json({
     success: true,
@@ -59,23 +60,27 @@ app.post('/api/v1/chat/send', (req, res) => {
   });
 });
 
-// GET messages
 app.get('/api/v1/chat/messages', (req, res) => {
   const { after = '0', limit = '50', chatType = 'local', serverId } = req.query;
   const afterTime = Number(after);
   
+  console.log('GET request:', { chatType, serverId, after });  // DEBUG
+  
   let filtered = messages.filter(msg => {
-    // Must be after timestamp
     if (msg.timestamp <= afterTime) return false;
-    
-    // Must match chatType
     if (msg.chatType !== chatType) return false;
     
-    // If local chat, must match serverId
-    if (chatType === 'local' && msg.serverId !== serverId) return false;
+    // For local chat, MUST match serverId exactly (both as strings)
+    if (chatType === 'local') {
+      if (!serverId || String(msg.serverId) !== String(serverId)) {
+        return false;
+      }
+    }
     
     return true;
   }).slice(0, Number(limit));
+  
+  console.log('Filtered messages:', filtered.length);  // DEBUG
   
   res.json({
     success: true,
@@ -84,5 +89,5 @@ app.get('/api/v1/chat/messages', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Global chat server running on port ${port}`);
+  console.log(`Chat server running on port ${port}`);
 });
