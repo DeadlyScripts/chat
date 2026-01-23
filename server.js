@@ -13,13 +13,14 @@ let globalMessages = [];
 let localServers = {};              // serverId → array of local messages
 
 const MAX_MESSAGES = 150;           // Prevent memory explosion on free tier
+const MAX_MESSAGE_LENGTH = 500;
 
 // Simple health check (ping this to keep Render awake)
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Initialize session (optional, can be empty or log)
+// Initialize session (optional)
 app.post('/api/v1/chat/init', (req, res) => {
   res.json({ success: true });
 });
@@ -31,19 +32,16 @@ app.get('/api/v1/chat/messages', (req, res) => {
   const after = parseInt(req.query.after) || 0;
   let limit = parseInt(req.query.limit) || 50;
 
-  // Start with all global messages (everyone sees these)
   let messages = [...globalMessages];
 
-  // If local mode + serverId, add that server's local messages
   if (chatType === 'local' && serverId && localServers[serverId]) {
     messages = messages.concat(localServers[serverId]);
   }
 
-  // Filter by timestamp and limit
   messages = messages
     .filter(msg => msg.timestamp > after)
-    .sort((a, b) => a.timestamp - b.timestamp) // oldest first
-    .slice(-limit); // last N messages
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(-limit);
 
   res.json({
     success: true,
@@ -59,6 +57,10 @@ app.post('/api/v1/chat/send', (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing required fields' });
   }
 
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return res.status(400).json({ success: false, message: 'Message too long' });
+  }
+
   const timestamp = Date.now();
   const msgData = {
     id: `${timestamp}-${Math.random().toString(36).slice(2)}`,
@@ -70,11 +72,11 @@ app.post('/api/v1/chat/send', (req, res) => {
     timestamp
   };
 
-  // Always add to global (so both modes can see it)
+  // Always add to global
   globalMessages.push(msgData);
   if (globalMessages.length > MAX_MESSAGES) globalMessages.shift();
 
-  // If local chat, also store in that server bucket
+  // Local chat storage
   if (chatType === 'local' && serverId) {
     if (!localServers[serverId]) localServers[serverId] = [];
     localServers[serverId].push(msgData);
@@ -84,7 +86,7 @@ app.post('/api/v1/chat/send', (req, res) => {
   res.json({
     success: true,
     message: 'Message sent',
-    messageData
+    messageData: msgData // ✅ FIXED
   });
 });
 
