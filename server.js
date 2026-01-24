@@ -10,7 +10,7 @@ app.use(express.json());            // Parse JSON bodies
 
 // In-memory storage (resets on restart/sleep, fine for small chat)
 let globalMessages = [];
-let localServers = {};              // serverId → array of local messages
+let localServers = {};              // serverId → array of local-only messages
 
 const MAX_MESSAGES = 150;           // Prevent memory explosion on free tier
 const MAX_MESSAGE_LENGTH = 500;
@@ -20,7 +20,7 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Initialize session (optional)
+// Initialize session (optional, can be empty or log)
 app.post('/api/v1/chat/init', (req, res) => {
   res.json({ success: true });
 });
@@ -32,16 +32,24 @@ app.get('/api/v1/chat/messages', (req, res) => {
   const after = parseInt(req.query.after) || 0;
   let limit = parseInt(req.query.limit) || 50;
 
-  let messages = [...globalMessages];
+  let messages = [];
 
-  if (chatType === 'local' && serverId && localServers[serverId]) {
-    messages = messages.concat(localServers[serverId]);
+  if (chatType === 'global') {
+    // Global mode → only global messages
+    messages = [...globalMessages];
+  } else if (chatType === 'local' && serverId) {
+    // Local mode → only messages from this server
+    messages = localServers[serverId] ? [...localServers[serverId]] : [];
+  } else {
+    // Invalid request → return empty
+    return res.json({ success: true, messages: [] });
   }
 
+  // Filter by timestamp and limit (newest first)
   messages = messages
     .filter(msg => msg.timestamp > after)
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .slice(-limit);
+    .sort((a, b) => b.timestamp - a.timestamp) // newest first
+    .slice(0, limit); // first N (newest)
 
   res.json({
     success: true,
@@ -72,21 +80,21 @@ app.post('/api/v1/chat/send', (req, res) => {
     timestamp
   };
 
-  // Always add to global
-  globalMessages.push(msgData);
-  if (globalMessages.length > MAX_MESSAGES) globalMessages.shift();
-
-  // Local chat storage
   if (chatType === 'local' && serverId) {
+    // Local message → only store in this server
     if (!localServers[serverId]) localServers[serverId] = [];
     localServers[serverId].push(msgData);
     if (localServers[serverId].length > MAX_MESSAGES) localServers[serverId].shift();
+  } else {
+    // Global message → only store in global
+    globalMessages.push(msgData);
+    if (globalMessages.length > MAX_MESSAGES) globalMessages.shift();
   }
 
   res.json({
     success: true,
     message: 'Message sent',
-    messageData: msgData // ✅ FIXED
+    messageData
   });
 });
 
