@@ -1,4 +1,4 @@
-could u make it not only global add also local pls const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 3000;
