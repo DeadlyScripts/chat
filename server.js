@@ -25,7 +25,7 @@ app.post('/api/v1/chat/init', (req, res) => {
 });
 
 // Get messages – FIXED: separate logic for global vs local
-app.get('/api/v1/chat/messages', (req, res) => {
+app.post('/api/v1/chat/messages', (req, res) => {
   const chatType = req.query.chatType || 'global';
   const serverId = req.query.serverId;
   const after = parseInt(req.query.after) || 0;
